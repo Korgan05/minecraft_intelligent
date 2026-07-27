@@ -16,6 +16,7 @@
   * отчёт о командах выключен -> чат не засоряет кадр, который существо видит.
 """
 
+import math
 import random
 
 GROUND_Y = 4                     # пол загона
@@ -171,15 +172,39 @@ def sluchajnoe_mesto_zombi(rng=None):
     return ZOMBIE_SPOT                        # на всякий случай
 
 
-def sbros_boya(igrok, rng=None, zombi=None):
+def mesto_szadi(yaw, rng=None, dalnost=4.0):
+    """Точка ЗА СПИНОЙ существа, если оно смотрит под углом yaw.
+
+    Нужна для урока «развернуться к тому, кто подошёл со спины». При случайном
+    появлении такая ситуация выпадает редко, и человеку пришлось бы стоять и
+    ждать её — в запись пошли бы минуты пустого стояния. Лучше подстроить.
+
+    В Minecraft угол 0 смотрит вдоль +Z, 90 — вдоль -X. Значит взгляд это
+    (-sin, cos), а спина — то же с обратным знаком.
+    """
+    rng = rng or random
+    ugol = math.radians(float(yaw))
+    px, _, pz = SPAWN
+    razbros = rng.uniform(-0.6, 0.6)           # чуть в сторону, чтобы не одно и то же
+    d = dalnost + rng.uniform(-0.5, 0.5)
+    x = px + math.sin(ugol) * d + math.cos(ugol) * razbros
+    z = pz - math.cos(ugol) * d + math.sin(ugol) * razbros
+    vnutri = ARENA_R - 1.5
+    return (round(max(-vnutri, min(vnutri, x)), 1), GROUND_Y,
+            round(max(-vnutri, min(vnutri, z)), 1))
+
+
+def sbros_boya(igrok, rng=None, zombi=None, yaw=None, szadi=False):
     """Новый бой БЕЗ пересоздания мира — вот ради чего всё затевалось."""
     rng = rng or random
     x, y, z = SPAWN
-    yaw = round(rng.uniform(-180, 180), 1)    # существо смотрит куда попало: пусть ищет
+    # По умолчанию существо смотрит куда попало: пусть ищет цель само.
+    # Для уроков угол можно задать, чтобы ставить нужную ситуацию нарочно.
+    yaw = round(rng.uniform(-180, 180), 1) if yaw is None else round(float(yaw), 1)
     skolko = ZOMBI_NA_ARENE if zombi is None else int(zombi)
     prizyv = []
     for _ in range(max(skolko, 1)):
-        zx, zy, zz = sluchajnoe_mesto_zombi(rng)
+        zx, zy, zz = mesto_szadi(yaw, rng) if szadi else sluchajnoe_mesto_zombi(rng)
         kto = rng.choice(MOBY)                # мешаем противников из списка
         prizyv.append(f"summon minecraft:{kto} {zx} {zy} {zz} {nbt_moba(kto)}")
     return [

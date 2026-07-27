@@ -48,12 +48,17 @@ MAX_PODRYAD_STOYAT = 4
 SHAGOV_MEZHDU_SOHRANENIYAMI = 150      # 150 * 0.2 сек = 30 секунд
 
 
-def sohranit(fajl, pov_l, vec_l, act_l, nag_l):
+def sohranit(fajl, pov_l, vec_l, act_l, nag_l, grad_l):
     if not act_l:
         return False
+    # ТОЧНЫЕ ГРАДУСЫ храним рядом со ступеньками. Мозгу сейчас нужны ступеньки —
+    # его канал поворота выбирает из десяти величин. Но если позже дадим ему
+    # НЕПРЕРЫВНЫЙ поворот, чтобы он вертелся так же плавно, как человек, — уроки
+    # переписывать не придётся: точные числа уже здесь.
     np.savez_compressed(fajl, pov=np.stack(pov_l), vec=np.stack(vec_l),
                         act=np.asarray(act_l, dtype=np.int64),
-                        nag=np.asarray(nag_l, dtype=np.float32))
+                        nag=np.asarray(nag_l, dtype=np.float32),
+                        gradus=np.asarray(grad_l, dtype=np.float32))
     return True
 
 
@@ -87,7 +92,7 @@ def opredelit_reshenie(d_yaw, d_pitch, klavishi, udar):
     )
 
 
-def itog(act_l, ubijstv, uron_vsego, fajl, sohranyat):
+def itog(act_l, grad_l, ubijstv, uron_vsego, fajl, sohranyat):
     n = len(act_l)
     print(f"\nнаиграно примеров: {n} | убийств: {ubijstv} | урона: {uron_vsego:.1f} HP")
     if not n:
@@ -110,6 +115,14 @@ def itog(act_l, ubijstv, uron_vsego, fajl, sohranyat):
     print(f"движение И поворот вместе: {vmeste} шагов ({100 * vmeste / n:.0f}%)")
     if vmeste == 0:
         print("  ноль — а ведь этому мы и хотели научить: кружить, не отпуская прицел")
+    if grad_l:
+        g = np.abs(np.asarray(grad_l, dtype=np.float32)[:, 0])
+        krutil = g[g > 0.5]
+        print("\nточные градусы поворота (храним их для будущего):")
+        print(f"  шагов с поворотом: {len(krutil)} из {n}")
+        if len(krutil):
+            print(f"  в среднем {krutil.mean():.1f} гр за шаг, "
+                  f"самый крупный {krutil.max():.0f} гр")
     print(f"\n{'сохранено: ' + str(fajl) if sohranyat else 'ПРОБА: ничего не сохранено.'}")
 
 
@@ -117,6 +130,9 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--proba", action="store_true", help="привыкаю: НЕ сохранять запись")
     p.add_argument("--minut", type=float, default=20.0, help="сколько минут записывать")
+    p.add_argument("--metka", default="", help="имя урока: попадёт в название файла")
+    p.add_argument("--szadi", action="store_true",
+                   help="зомби появляется ЗА СПИНОЙ: урок разворота к цели")
     args = p.parse_args()
 
     OUT.mkdir(exist_ok=True)
@@ -128,14 +144,16 @@ def main():
     k.komandy(A.schetchiki())
     k.komandy(A.postroit_zagon())
     k.komandy(A.podgotovit_bojca(igrok))
-    k.komandy(A.sbros_boya(igrok))
+    sbros = lambda: A.sbros_boya(igrok, szadi=args.szadi)
+    k.komandy(sbros())
 
     # Смотрим глазами существа: тот же кадр, те же приборы, тот же угол.
     # Команда SOSTOYANIE ничего не нажимает, так что играешь только ты.
     svyaz = P.Pupovina()
     svyaz.razmer_kadra(64, 64)
     hwnd, zagolovok = G.najti_okno("Minecraft")
-    fajl = OUT / f"pokaz-{datetime.now():%Y%m%d-%H%M%S}.npz"
+    metka = ("-" + args.metka) if args.metka else ""
+    fajl = OUT / f"pokaz{metka}-{datetime.now():%Y%m%d-%H%M%S}.npz"
 
     print(f"игрок {igrok} | окно «{zagolovok}» | {svyaz.ping()}")
     print(f"пиши {args.minut:g} минут. Остановить — Ctrl+C В ЭТОМ ОКНЕ.")
@@ -144,17 +162,20 @@ def main():
     print("Хочешь научить держать прицел — кружи вокруг зомби боком, не отпуская его.")
     print("ЩЁЛКНИ ПО ОКНУ MINECRAFT сейчас, иначе запись будет на паузе.\n")
 
-    pov_l, vec_l, act_l, nag_l = [], [], [], []
+    pov_l, vec_l, act_l, nag_l, grad_l = [], [], [], [], []
     nachalo = svyaz.sostoyanie()
     pred_yaw, pred_pitch = nachalo["yaw"], nachalo["pitch"]
     pred = A.schet_boya(k, igrok)
     stoyal, ubijstv, uron_vsego = 0, 0, 0.0
     srok = time.perf_counter() + M.SEK_NA_SHAG
-    konec = time.perf_counter() + args.minut * 60
+    # Отсчёт начинаем с ПЕРВОГО записанного кадра, а не с запуска. Первая версия
+    # считала время от запуска — и все четыре минуты пробы утекли, пока человек
+    # читал, что от него требуется. Записалось ноль примеров.
+    konec = None
     zhalovalsya = False
 
     try:
-        while time.perf_counter() < konec:
+        while konec is None or time.perf_counter() < konec:
             ostalos = srok - time.perf_counter()
             if ostalos > 0:
                 time.sleep(ostalos)
@@ -166,7 +187,13 @@ def main():
                     zhalovalsya = True
                 time.sleep(0.3)
                 continue
+            if zhalovalsya:
+                print("  окно впереди — пишу")
             zhalovalsya = False
+            if konec is None:
+                konec = time.perf_counter() + args.minut * 60
+                print(f"  === ПОШЛА ЗАПИСЬ: {args.minut:g} минут с этой секунды ===",
+                      flush=True)
 
             o = svyaz.sostoyanie()
             if o["menyu"] or not o["v_mire"]:
@@ -190,7 +217,7 @@ def main():
             # убийстве — при трёх зомби это дало бы бесконечную подпитку.
             if not A.est_mobov(k):
                 print(f"  --- волна зачищена, новые {A.ZOMBI_NA_ARENE} на арене ---")
-                k.komandy(A.sbros_boya(igrok))
+                k.komandy(sbros())
                 time.sleep(0.4)
                 s = A.schet_boya(k, igrok)
                 o = svyaz.sostoyanie()
@@ -209,23 +236,24 @@ def main():
                     dtype=np.float32))
                 act_l.append(reshenie)
                 nag_l.append(d_uron * M.ZA_HP_URONA)
+                grad_l.append((d_yaw, d_pitch))
                 if d_uron > 0:
                     print(f"  попал: {d_uron:.1f} HP ({KAN.slovami(reshenie)}, "
                           f"записано {len(act_l)})")
                 if not args.proba and len(act_l) % SHAGOV_MEZHDU_SOHRANENIYAMI == 0:
-                    sohranit(fajl, pov_l, vec_l, act_l, nag_l)
+                    sohranit(fajl, pov_l, vec_l, act_l, nag_l, grad_l)
                     print(f"  [сохранено по ходу: {len(act_l)} примеров]")
     except KeyboardInterrupt:
         print("\nостановлено вручную")
     finally:
         if not args.proba:
-            sohranit(fajl, pov_l, vec_l, act_l, nag_l)
+            sohranit(fajl, pov_l, vec_l, act_l, nag_l, grad_l)
         try:
             svyaz.close()
             k.close()
         except Exception:
             pass
-        itog(act_l, ubijstv, uron_vsego, fajl, not args.proba)
+        itog(act_l, grad_l, ubijstv, uron_vsego, fajl, not args.proba)
 
 
 if __name__ == "__main__":
