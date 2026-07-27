@@ -1,0 +1,17 @@
+version:2586
+renderDistance:6
+guiScale:2
+fancyGraphics:false
+ao:1
+maxFps:60
+enableVsync:false
+pauseOnLostFocus:false
+fullscreen:false
+mouseSensitivity:0.5
+particles:1
+entityShadows:false
+autoJump:false
+narrator:0
+tutorialStep:none
+skipMultiplayerWarning:true
+joinedFirstServer:true
