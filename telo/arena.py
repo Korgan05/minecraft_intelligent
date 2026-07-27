@@ -67,6 +67,14 @@ SCHET_UBIJSTVA = "ubijstva"      # minecraft.custom:minecraft.mob_kills — ЛЮ
 # обычными 20 здоровья вместо 40 и добивало его вполовину слабее. Со стороны это
 # выглядело как честная победа. Счётчик не умеет не заметить.
 SCHET_SMERTEJ = "smerti"         # minecraft.custom:minecraft.deaths
+# УБИЙСТВА ИГРОКОВ — отдельный счётчик игры. mob_kills человека НЕ считает, и
+# без этого существо не получило бы награды за победу над тобой: только за урон.
+SCHET_IGROKOV = "ubijstva_igrokov"   # minecraft.custom:minecraft.player_kills
+
+# ПРОТИВНИК-ЧЕЛОВЕК. Когда True, зомби не призываются и волна не сбрасывается по
+# «мобов не осталось»: противник — ты, и ты не моб. Иначе мир начинал бы новый
+# бой каждый шаг, потому что мобов в загоне и правда нет.
+PROTIV_CHELOVEKA = False
 
 
 def pravila_mira():
@@ -99,6 +107,7 @@ def schetchiki():
         f"scoreboard objectives add {SCHET_BOL} minecraft.custom:minecraft.damage_taken",
         f"scoreboard objectives add {SCHET_UBIJSTVA} minecraft.custom:minecraft.mob_kills",
         f"scoreboard objectives add {SCHET_SMERTEJ} minecraft.custom:minecraft.deaths",
+        f"scoreboard objectives add {SCHET_IGROKOV} minecraft.custom:minecraft.player_kills",
     ]
 
 
@@ -172,6 +181,30 @@ def sluchajnoe_mesto_zombi(rng=None):
     return ZOMBIE_SPOT                        # на всякий случай
 
 
+def vse_igroki(konsol):
+    """Все, кто сейчас в мире. Нужно для боя человека против существа: там их двое,
+    и подготовить надо обоих, иначе человек выйдет с обычными 20 здоровья и без меча —
+    то есть бой будет нечестным в другую сторону."""
+    otvet = konsol.komanda("list")
+    if ":" not in otvet:
+        return []
+    return [x.strip() for x in otvet.split(":", 1)[1].split(",") if x.strip()]
+
+
+def rasstavit_protiv(sushchestvo, chelovek):
+    """Развести противников по разным сторонам загона, лицом друг к другу.
+
+    Против зомби существо ставится в середину и разворачивается куда попало —
+    пусть ищет. Против человека так нельзя: если начинать вплотную, весь бой
+    выродится в размен ударами, и ни подход, ни отход не понадобятся.
+    """
+    d = ARENA_R - 2
+    return [
+        f"tp {sushchestvo} 0.5 {GROUND_Y} {-d + 0.5} 0 0",     # смотрит на +Z
+        f"tp {chelovek} 0.5 {GROUND_Y} {d + 0.5} 180 0",       # смотрит на -Z
+    ]
+
+
 def mesto_szadi(yaw, rng=None, dalnost=4.0):
     """Точка ЗА СПИНОЙ существа, если оно смотрит под углом yaw.
 
@@ -202,8 +235,10 @@ def sbros_boya(igrok, rng=None, zombi=None, yaw=None, szadi=False):
     # Для уроков угол можно задать, чтобы ставить нужную ситуацию нарочно.
     yaw = round(rng.uniform(-180, 180), 1) if yaw is None else round(float(yaw), 1)
     skolko = ZOMBI_NA_ARENE if zombi is None else int(zombi)
+    if PROTIV_CHELOVEKA:
+        skolko = 0            # противник — человек, зомби только мешали бы
     prizyv = []
-    for _ in range(max(skolko, 1)):
+    for _ in range(skolko):
         zx, zy, zz = mesto_szadi(yaw, rng) if szadi else sluchajnoe_mesto_zombi(rng)
         kto = rng.choice(MOBY)                # мешаем противников из списка
         prizyv.append(f"summon minecraft:{kto} {zx} {zy} {zz} {nbt_moba(kto)}")
@@ -228,6 +263,7 @@ def sbros_boya(igrok, rng=None, zombi=None, yaw=None, szadi=False):
         f"scoreboard players set {igrok} {SCHET_BOL} 0",
         f"scoreboard players set {igrok} {SCHET_UBIJSTVA} 0",
         f"scoreboard players set {igrok} {SCHET_SMERTEJ} 0",
+        f"scoreboard players set {igrok} {SCHET_IGROKOV} 0",
     ] + prizyv
 
 
@@ -267,6 +303,44 @@ def sostoyanie(konsol, igrok):
             "zhizn": zhizn, "sytost": sytost}
 
 
+def rasstoyanie_do_moba(konsol, igrok, cel=None):
+    """Сколько блоков до цели. None — цели нет.
+
+    По умолчанию цель — ближайший наш моб. В бою против человека мобов нет вовсе,
+    и целью надо передать его имя: иначе расстояние всегда None, и плата за
+    простой не сработает ни разу.
+
+    Нужно НАГРАДЕ, а не существу. Это важное разделение: учитель вправе знать
+    больше ученика. В чувства существу расстояние не подаётся — оно по-прежнему
+    видит только пиксели, и читерства тут нет. Мы лишь можем сказать «горячо» или
+    «холодно», как человек, который смотрит на экран со стороны.
+
+    Зачем понадобилось. Замер показал, что существо не выжидает нарочно: долгий
+    бой стоит ему 20.6 здоровья против 4.8 у быстрого, то есть медлить прямо
+    убыточно. Оно просто НЕ УМЕЕТ быстрее — из восемнадцати секунд боя удары
+    занимают три, остальное поиск. А награда до сих пор появлялась только когда
+    зомби уже достали мечом: между «повернулся не туда» и «повернулся к цели»
+    для существа не было никакой разницы. Теперь есть, на каждом шаге.
+    """
+    pos_igroka = _koordinaty(konsol, igrok)
+    pos_moba = _koordinaty(konsol, cel or f"@e[tag={METKA},limit=1,sort=nearest]")
+    if pos_igroka is None or pos_moba is None:
+        return None
+    return ((pos_igroka[0] - pos_moba[0]) ** 2
+            + (pos_igroka[2] - pos_moba[2]) ** 2) ** 0.5
+
+
+def _koordinaty(konsol, kogo):
+    otvet = konsol.komanda(f"data get entity {kogo} Pos")
+    chisla = []
+    for slovo in otvet.replace("[", " ").replace("]", " ").replace(",", " ").split():
+        try:
+            chisla.append(float(slovo.rstrip("d")))
+        except ValueError:
+            continue
+    return tuple(chisla[-3:]) if len(chisla) >= 3 else None
+
+
 def podkrepit_zdorovye(igrok):
     """Выдать усиленное здоровье заново. Отдельно — потому что после смерти это
     приходится повторять: возрождение смывает свойства игрока."""
@@ -290,6 +364,7 @@ def schet_boya(konsol, igrok):
     return {"uron": konsol.chislo_scoreboard(igrok, SCHET_URON),
             "bol": konsol.chislo_scoreboard(igrok, SCHET_BOL),
             "ubijstva": konsol.chislo_scoreboard(igrok, SCHET_UBIJSTVA),
+            "ubijstva_igrokov": konsol.chislo_scoreboard(igrok, SCHET_IGROKOV),
             "smerti": konsol.chislo_scoreboard(igrok, SCHET_SMERTEJ)}
 
 

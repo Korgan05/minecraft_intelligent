@@ -24,13 +24,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from telo import kanaly as KAN
 from telo import mir as M
 
-SHAGOV = 250
+SHAGOV = (int(sys.argv[sys.argv.index("--shagov") + 1])
+          if "--shagov" in sys.argv else 250)
 POVOROTY = [i for i, g in enumerate(KAN.POVOROT) if g != 0.0]
 
 
 def main():
-    mozg = PPO.load(Path(__file__).resolve().parent.parent / "models" / "ppo_ubijca",
-                    device="cuda")
+    put = Path(__file__).resolve().parent.parent / "models" / "ppo_ubijca"
+    if "--mozg" in sys.argv:
+        put = Path(sys.argv[sys.argv.index("--mozg") + 1])
+    print(f"мозг: {put.name}")
+    mozg = PPO.load(put, device="cuda")
     mir = M.Bojnya()
     mir.zhdat_gotovnosti()
 

@@ -97,6 +97,17 @@ def sobrat_argumenty(spisok, zameny):
 
 
 def main():
+    # Второй клиент нужен для боя человека против существа: у каждого свой
+    # игрок на сервере, а значит своя папка игры и своё имя. Одной установкой
+    # тут не обойтись — два клиента из одной папки затирали бы друг другу
+    # настройки и логи.
+    global KLIENT, IMYA
+    if "--vtoroj" in sys.argv:
+        KLIENT = Path(__file__).resolve().parent / "klient2"
+        IMYA = "Chelovek"
+    if "--imya" in sys.argv:
+        IMYA = sys.argv[sys.argv.index("--imya") + 1]
+
     papka = MINECRAFT / "versions" / VERSIYA
     opisanie_fajl = papka / f"{VERSIYA}.json"
     if not opisanie_fajl.exists():
@@ -115,8 +126,11 @@ def main():
     KLIENT.mkdir(exist_ok=True)
     (KLIENT / "mods").mkdir(exist_ok=True)
     mody = list((KLIENT / "mods").glob("*.jar"))
-    if not mody:
-        raise SystemExit(f"В {KLIENT / 'mods'} нет ни одного мода. Собери: zapusk\\sobrat-mod.bat")
+    # Второму клиенту мод НЕ нужен: за ним играет человек руками. Больше того,
+    # он бы навредил — два мода стали бы драться за один и тот же порт 25580.
+    if not mody and "--vtoroj" not in sys.argv:
+        raise SystemExit(f"В {KLIENT / 'mods'} нет ни одного мода. "
+                         "Собери: zapusk\\sobrat-mod.bat")
 
     zameny = {
         "auth_player_name": IMYA,

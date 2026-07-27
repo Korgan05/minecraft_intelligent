@@ -178,6 +178,7 @@ def main():
     # читал, что от него требуется. Записалось ноль примеров.
     konec = None
     zhalovalsya = False
+    skazano_ostalos = None
 
     try:
         while konec is None or time.perf_counter() < konec:
@@ -192,17 +193,51 @@ def main():
                     zhalovalsya = True
                 time.sleep(0.3)
                 continue
-            if zhalovalsya:
-                print("  окно впереди — пишу")
             zhalovalsya = False
-            if konec is None:
-                konec = time.perf_counter() + args.minut * 60
-                print(f"  === ПОШЛА ЗАПИСЬ: {args.minut:g} минут с этой секунды ===",
-                      flush=True)
 
             o = svyaz.sostoyanie()
-            if o["menyu"] or not o["v_mire"]:
+            if not o["v_mire"]:
                 continue
+
+            # ОСТАНОВКА ПО ESCAPE. Меню при АКТИВНОМ окне значит человек нажал
+            # Escape сам — останавливаемся и сохраняем. Меню при неактивном окне
+            # открыла сама игра при уходе фокуса, и останавливаться по нему
+            # нельзя: человек мог просто отойти на минуту.
+            if o["menyu"]:
+                if konec is not None and o["fokus"]:
+                    print("\n  === ESCAPE: останавливаю запись и сохраняю ===")
+                    break
+                continue                       # ещё не начали или это Alt+Tab
+
+            if konec is None:
+                # Обратный отсчёт, чтобы успеть взяться за мышь.
+                for i in range(5, 0, -1):
+                    print(f"  готовься: {i}...", flush=True)
+                    svyaz.skazat(f"§eГОТОВЬСЯ: {i}")
+                    time.sleep(1)
+                    if not R.okno_vperedi(hwnd):
+                        print("  окно ушло — отсчёт отменён, щёлкни по игре снова")
+                        break
+                else:
+                    konec = time.perf_counter() + args.minut * 60
+                    print(f"\n  === ПОШЛА ЗАПИСЬ: {args.minut:g} минут ===")
+                    print("  Остановить: Escape в игре или Ctrl+C в этом окне.\n",
+                          flush=True)
+                    srok = time.perf_counter() + M.SEK_NA_SHAG
+                continue
+
+            # Каждые полминуты говорим, сколько осталось.
+            minut_ostalos = (konec - time.perf_counter()) / 60.0
+            metka_vremeni = int(minut_ostalos * 2)
+            if metka_vremeni != skazano_ostalos:
+                skazano_ostalos = metka_vremeni
+                ostalos_slovami = (f"{int(minut_ostalos)}:"
+                                   f"{int(minut_ostalos % 1 * 60):02d}")
+                print(f"  [осталось {ostalos_slovami} | записано {len(act_l)}]",
+                      flush=True)
+                # То же самое — В ИГРУ, иначе человек этого не увидит.
+                svyaz.skazat(f"§7осталось {ostalos_slovami} | "
+                             f"записано {len(act_l)}")
             klavishi = {imya for imya in ("W", "A", "S", "D", "SPACE")
                         if R.nazhimalas(imya)}
             udar = R.nazhimalas("MYSH_LEVAYA")   # щелчки короче шага — ловим и их

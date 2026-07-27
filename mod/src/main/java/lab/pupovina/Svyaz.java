@@ -95,6 +95,13 @@ public final class Svyaz implements Runnable {
             tekst(vyhod, "PUPOVINA 1 " + Glaza.shirina() + "x" + Glaza.vysota());
             return;
         }
+        if ("SKAZAT".equals(chto)) {
+            // Показать надпись человеку В ИГРЕ. Обратный отсчёт в консоли он не
+            // видит: он смотрит в игру, а не в наше окно.
+            Ruki.skazat(zapros.length() > 7 ? zapros.substring(7) : "");
+            tekst(vyhod, "OK");
+            return;
+        }
         if ("DIAG".equals(chto)) {
             tekst(vyhod, Pupovina.diagnostika());
             return;

@@ -21,5 +21,5 @@ echo Otschet nachnetsya s pervogo kadra: shchelkni po Minecraft kogda gotov.
 echo Ostanovit ranshe: Ctrl+C V ETOM OKNE.
 echo.
 pause
-"%PY%" zapis.py --metka kruzhenie --minut 6 %*
+"%PY%" zapis.py --metka kruzhenie --minut 6 --szadi %*
 pause

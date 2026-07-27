@@ -71,6 +71,56 @@ PAIN_ZA_HP = 0.3
 DEATH_PENALTY = 3.0
 MAX_SHAGOV = 400                 # предел боя (~80 секунд), чтобы не висеть в пустом загоне
 
+# ПЛАТА ЗА ВРЕМЯ. Добавлена после наблюдения человека: существо крутилось на
+# месте, ждало, пока зомби подойдёт сам, и било на пределе вытянутой руки.
+#
+# Это была не глупость, а ПРАВИЛЬНЫЙ ответ на прежние правила. Подойти к зомби
+# значит попасть под удар, а боль стоит 0.3 за единицу здоровья — плата
+# немедленная. За медлительность же оно платило только отложенной наградой.
+# Выжидание было выгодно: 10 убийств из 10, потеря всего 14 здоровья из 40.
+# Мы платили за урон и за убийство, но не платили за темп — и получили ожидание.
+#
+# Величина выбрана счётом, а не на глаз. Подойти стоит примерно 6 здоровья, то
+# есть 1.8 платы за боль. Значит выжидание в 50 шагов должно стоить дороже: при
+# 0.1 за шаг это 5, и сближаться становится явно выгоднее, чем стоять.
+#
+# ВНИМАНИЕ: эта правка делает несравнимыми все прежние замеры. Нынешние 100%
+# убийств получены при старых правилах.
+ZA_SHAG = 0.1
+
+# ПЛАТА ЗА ПРОСТОЙ ВДАЛИ.
+#
+# Сперва я сделал плату за СБЛИЖЕНИЕ — и человек сразу указал на изъян: она
+# наказывает ОТХОД, то есть ровно тот приём, который он в этот же день записывал
+# уроком («ударил — отошёл — разбежался»). Каждый шаг назад стоил бы существу
+# минуса. Правило противоречило уроку, и хорошо, что это заметили до прогона.
+#
+# Верная мысль оказалась его: наказывать надо не отход, а ПРОСТОЙ. Стоять вдали
+# от зомби и вертеться — вот что видно в замерах (71% шагов «стоять»). Отход же
+# законен, и трогать его нельзя.
+#
+# Поэтому плата берётся только при двух условиях сразу: ноги ничего не делают И
+# зомби дальше вытянутой руки. Тогда:
+#   * стоять рядом и бить — можно, это и надо делать;
+#   * отходить, кружить, разбегаться — можно, ноги работают;
+#   * торчать вдали столбом — нельзя.
+#
+# Расстояние берётся у сервера. Существо его НЕ ВИДИТ: в чувства по-прежнему
+# идут только пиксели. Учитель вправе знать больше ученика — это не читерство,
+# а подсказка со стороны, как у человека, который смотрит на экран.
+ZA_PROSTOJ_VDALI = 0.3
+DALEKO = 4.0                     # дальше этого мечом не достать
+
+
+def ubito(schet):
+    """Сколько всего убито: и мобов, и людей.
+
+    Два счётчика, а не один, потому что игра считает их отдельно: mob_kills
+    человека не видит вовсе. Складываем — существу всё равно, кого оно
+    победило, награда за победу одна.
+    """
+    return (schet.get("ubijstva") or 0) + (schet.get("ubijstva_igrokov") or 0)
+
 
 class Bojnya(gym.Env):
     metadata = {"render_modes": ["rgb_array"]}
@@ -94,8 +144,20 @@ class Bojnya(gym.Env):
         self.k.komandy(A.schetchiki())
         self.k.komandy(A.postroit_zagon())
         self.k.komandy(A.podgotovit_bojca(self.igrok))
+        # Против человека готовим ОБОИХ: иначе он выйдет с обычными 20 здоровья
+        # и без меча, и бой окажется нечестным в другую сторону.
+        self.chelovek = None
+        if A.PROTIV_CHELOVEKA:
+            drugie = [i for i in A.vse_igroki(self.k) if i != self.igrok]
+            if not drugie:
+                raise SystemExit("Режим боя против человека, но в мире только один "
+                                 "игрок. Запусти второй клиент: igra.py --vtoroj")
+            self.chelovek = drugie[0]
+            self.k.komandy(A.podgotovit_bojca(self.chelovek))
+            print(f"противник-человек: {self.chelovek}")
         self._pamyat = []
         self._posl = self.p.sostoyanie()      # последний взгляд: из него читаем флаги
+        self.pred_dalnost = None              # плату за сближение с пустого места не даём
         self.shagov = 0
 
     # ── чувства ──
@@ -131,6 +193,9 @@ class Bojnya(gym.Env):
         # За сотню боёв это случилось бы наверняка.
         self.p.shag()
         self.k.komandy(A.sbros_boya(self.igrok))
+        if self.chelovek:
+            self.k.komandy(A.podkrepit_zdorovye(self.chelovek))
+            self.k.komandy(A.rasstavit_protiv(self.igrok, self.chelovek))
         time.sleep(0.5)                       # даём миру принять сброс
         o = self._obespechit_zdorovye()
         # Память заполняем ОДНИМ И ТЕМ ЖЕ кадром: в начале боя движения ещё нет,
@@ -138,6 +203,9 @@ class Bojnya(gym.Env):
         self._pamyat = [o["kadr"].copy()] * KADROV_V_PAMYATI
         self._posl = o
         self.pred = A.schet_boya(self.k, self.igrok)
+        # Расстояние на начало боя. Без этого первый шаг получил бы плату за
+        # «сближение» с телепорта, которого существо не совершало.
+        self.pred_dalnost = A.rasstoyanie_do_moba(self.k, self.igrok, self.chelovek)
         self.shagov = 0
         self.srok = time.perf_counter() + SEK_NA_SHAG
         return self._obs(o, self._blizko()), {"igrok": self.igrok}
@@ -228,6 +296,9 @@ class Bojnya(gym.Env):
         print("  === ПРОДОЛЖАЮ ===\n", flush=True)
         self._posl = o
         self.pred = A.schet_boya(self.k, self.igrok)   # боль за простой не в вину
+        # Расстояние тоже перечитываем: за паузу зомби могли сдвинуться, и
+        # платить существу за это нельзя — оно в это время не действовало.
+        self.pred_dalnost = A.rasstoyanie_do_moba(self.k, self.igrok, self.chelovek)
         self.srok = time.perf_counter() + SEK_NA_SHAG
 
     def step(self, action):
@@ -246,7 +317,8 @@ class Bojnya(gym.Env):
         o = self.p.sostoyanie()
         self._posl = o
         s = A.schet_boya(self.k, self.igrok)
-        info, nagrada = {}, 0.0
+        # Плата за время идёт с первого же шага: стоять теперь не бесплатно.
+        info, nagrada = {}, -ZA_SHAG
 
         d_uron = max((s["uron"] or 0) - (self.pred["uron"] or 0), 0) / 10.0     # в HP
         if d_uron > 0:
@@ -257,8 +329,20 @@ class Bojnya(gym.Env):
             nagrada -= d_bol * PAIN_ZA_HP
             info["bol"] = d_bol
 
+        # Простой вдали: ноги ничего не делают И зомби дальше вытянутой руки.
+        # Ни отход, ни кружение сюда не попадают — там ноги работают.
+        dalnost = A.rasstoyanie_do_moba(self.k, self.igrok, self.chelovek)
+        nogi_stoyat = int(np.asarray(action).reshape(-1)[0]) == 0
+        if nogi_stoyat and dalnost is not None and dalnost > DALEKO:
+            nagrada -= ZA_PROSTOJ_VDALI
+            info["prostoj"] = dalnost
+        self.pred_dalnost = dalnost
+
         done = False
-        if (s["ubijstva"] or 0) > (self.pred["ubijstva"] or 0):
+        # Убийством считаем и моба, и человека. Счётчик mob_kills игрока не
+        # считает, поэтому без второго слагаемого победа над человеком принесла бы
+        # существу только плату за урон, без награды за саму победу.
+        if (ubito(s) > ubito(self.pred)):
             nagrada += KILL_BONUS
             info["kill"] = True
             done = True                       # убил — бой кончен, сразу новый зомби

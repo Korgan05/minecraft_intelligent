@@ -94,9 +94,15 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--shagov", type=int, default=2_000_000)
     p.add_argument("--lr", type=float, default=2.5e-4)
+    p.add_argument("--protiv-cheloveka", action="store_true",
+                   help="противник — человек за вторым клиентом, зомби не призывать")
     args = p.parse_args()
 
     MODELI.mkdir(exist_ok=True)
+    if args.protiv_cheloveka:
+        A.PROTIV_CHELOVEKA = True
+        print("РЕЖИМ БОЯ ПРОТИВ ЧЕЛОВЕКА: зомби не призываются, "
+              "убийство человека считается победой")
     print(f"ступень лестницы: зомби {A.ZOMBI_NA_ARENE}, "
           f"с мечом {'да' if A.ZOMBI_S_MECHOM else 'нет'}")
     # Monitor ОБЯЗАТЕЛЕН: именно он ведёт учёт эпизодов, из которого берутся

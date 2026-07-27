@@ -107,6 +107,15 @@ class Pupovina:
         self._poslat(f"RAZMER {shirina} {vysota}")
         return self._prinyat().decode("utf-8", "replace")
 
+    def skazat(self, tekst):
+        """Показать надпись человеку В ИГРЕ, над хотбаром.
+
+        Нужна для записи показа: обратный отсчёт в консоли человек не видит,
+        он смотрит в игру. Ввод при этом не трогается.
+        """
+        self._poslat("SKAZAT " + str(tekst))
+        return self._prinyat().decode("utf-8", "replace")
+
     def diag(self):
         """Что игра думает прямо сейчас: экран, фокус, прицел, нажатые клавиши."""
         self._poslat("DIAG")

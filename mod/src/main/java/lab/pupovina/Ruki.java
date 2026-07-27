@@ -4,6 +4,7 @@ import net.minecraft.client.GameSettings;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screen.IngameMenuScreen;
 import net.minecraft.client.settings.KeyBinding;
+import net.minecraft.util.text.StringTextComponent;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 
@@ -43,6 +44,17 @@ public final class Ruki {
     // Настройка человека «ставить игру на паузу при потере фокуса». На время
     // работы существа мы её гасим, потом возвращаем как было.
     private static Boolean chelovecheskaya_pauza;
+
+    /** Надпись, которую надо показать человеку В ИГРЕ, над хотбаром.
+     *
+     * Нужна для записи показа. Обратный отсчёт печатался в консоли — а человек
+     * в это время в игре и консоли не видит вовсе. Всё равно что кричать в
+     * другую комнату. Теперь считаем там, где он смотрит. */
+    private static volatile String nadpis;
+
+    public static void skazat(String tekst) {
+        nadpis = tekst;
+    }
 
     /** Правит ли существо прямо сейчас. */
     public static boolean pravit() {
@@ -121,6 +133,15 @@ public final class Ruki {
             return;
         }
         GameSettings o = mc.options;
+
+        // Надпись показываем ОТСЮДА, из игрового потока: писать в чужой поток
+        // игровые поля нельзя. Заодно это работает и во время записи показа,
+        // когда существо не правит вовсе.
+        String t = nadpis;
+        if (t != null) {
+            nadpis = null;
+            mc.player.displayClientMessage(new StringTextComponent(t), true);
+        }
 
         // ЗАКРЫВАЕМ МЕНЮ ПАУЗЫ, если существо взяло власть, а окно не впереди.
         // Иначе получается тупик: человек уходит на другое окно (меню само
