@@ -75,7 +75,7 @@ def blizhajshaya(gradusov, velichiny, krugom=False):
                if not (krugom and g == 180.0))[1]
 
 
-def opredelit_reshenie(d_yaw, d_pitch, klavishi, udar):
+def opredelit_reshenie(d_yaw, d_pitch, klavishi, udar, bezhit=False):
     """Твоя игра -> решение существа по пяти каналам.
 
     Ничего больше не теряется: идёшь боком с доворотом и бьёшь — все три части
@@ -89,6 +89,7 @@ def opredelit_reshenie(d_yaw, d_pitch, klavishi, udar):
         blizhajshaya(d_yaw, KAN.POVOROT, krugom=True),
         blizhajshaya(d_pitch, KAN.VZGLYAD),
         1 if udar else 0,
+        1 if bezhit else 0,
     )
 
 
@@ -109,12 +110,16 @@ def itog(act_l, grad_l, ubijstv, uron_vsego, fajl, sohranyat):
     krupnye = int(np.isin(act[:, 2], [i for i, g in enumerate(KAN.POVOROT)
                                       if abs(g) >= 45]).sum())
     vmeste = int(((act[:, 0] != 0) & (act[:, 2] != 0)).sum())
+    v_bege = int((act[:, 5] == 1).sum())
+    udar_v_bege = int(((act[:, 5] == 1) & (act[:, 4] == 1)).sum())
     print(f"\nкрупных поворотов (45 и больше): {krupnye}")
     if krupnye == 0:
         print("  ноль — либо ты не разворачивался, либо запись опять теряет величину")
     print(f"движение И поворот вместе: {vmeste} шагов ({100 * vmeste / n:.0f}%)")
     if vmeste == 0:
         print("  ноль — а ведь этому мы и хотели научить: кружить, не отпуская прицел")
+    print(f"бегом: {v_bege} шагов ({100 * v_bege / n:.0f}%), "
+          f"из них с ударом: {udar_v_bege}")
     if grad_l:
         g = np.abs(np.asarray(grad_l, dtype=np.float32)[:, 0])
         krutil = g[g > 0.5]
@@ -206,7 +211,8 @@ def main():
             d_pitch = o["pitch"] - pred_pitch
             pred_yaw, pred_pitch = o["yaw"], o["pitch"]
 
-            reshenie = opredelit_reshenie(d_yaw, d_pitch, klavishi, udar)
+            reshenie = opredelit_reshenie(d_yaw, d_pitch, klavishi, udar,
+                                          o["bezhit"])
             s = A.schet_boya(k, igrok)
             d_uron = max((s["uron"] or 0) - (pred["uron"] or 0), 0) / 10.0
             uron_vsego += d_uron

@@ -35,6 +35,9 @@ FLAG_FOKUS = 4        # окно игры сейчас впереди
 # Открыт любой экран — меню Escape, инвентарь, чат. Игра в этом состоянии не
 # разбирает клавиши, поэтому существо не ходит и не бьёт, что бы мы ни просили.
 FLAG_MENYU = 8
+# БЕЖИТ ли игрок. Спрашиваем игру, а не клавишу: человек часто разгоняется
+# двойным W, и по клавише бега такой разбег не был бы виден вовсе.
+FLAG_BEG = 16
 
 
 class NetSvyazi(RuntimeError):
@@ -156,6 +159,7 @@ class Pupovina:
             "pauza": bool(flagi & FLAG_PAUZA),
             "fokus": bool(flagi & FLAG_FOKUS),
             "menyu": bool(flagi & FLAG_MENYU),
+            "bezhit": bool(flagi & FLAG_BEG),
         }
 
     def close(self):

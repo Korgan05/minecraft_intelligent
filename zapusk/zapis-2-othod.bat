@@ -1,23 +1,30 @@
 @echo off
-title Urok 2 - OTHOD i podhod ne otpuskaya pricel
+title Urok 2 - OTHOD i UDAR V SPRINTE (otkid)
 cd /d "%~dp0.."
 set "PY=%USERPROFILE%\minecraft-ai\venv\Scripts\python.exe"
 echo.
-echo ======  UROK 2: OTHOD I PODHOD S PRICELOM  ======
+echo ======  UROK 2: OTHOD I UDAR V SPRINTE  ======
 echo.
-echo Tvoj sobstvennyj priem: udaril - otoshel, chtoby ne poluchit v otvet.
+echo Udar V SPRINTE daet USILENNYJ OTKID - im chelovek otbrasyvaet moba ot sebya.
+echo Protiv kripera eto spasaet zhizn: on otletaet, ne uspev vzorvatsya.
+echo U sushchestva bega ne bylo VOVSE, tak chto ottolknut nikogo ono ne moglo.
 echo.
-echo ChTO DELAT:
-echo   1. Udaril zombi - ZAZhMI S i othodi nazad.
-echo   2. Myshyu derzhi pricel na nem vse vremya othoda.
-echo   3. Otoshel na paru blokov - zazhmi W i nastupaj obratno, bej na podhode.
-echo   4. Szadi stena? Uhodi po diagonali: S+A ili S+D. Eto MOZhNO i nuzhno -
-echo      diagonali kak raz i poyavilis v novom nabore dejstvij.
+echo RITM, kotoryj nado pokazat (povtoryaj krug za krugom):
+echo   1. ZAZhMI S - othodi nazad, myshyu DERZhI PRICEL na zombi.
+echo   2. Otoshel na 3-4 bloka - otpusti S.
+echo   3. ZAZhMI W + LEVYJ CTRL - razbegajsya na nego (mozhno i dvojnym W).
+echo   4. UDAR v moment razbega - zombi otletit.
+echo   5. Srazu snova S i othodi. I tak po krugu.
 echo.
-echo Zapishetsya "nazad-vlevo + -5" i "vpered + +5 + udar".
+echo Szadi stena? Uhodi po diagonali: S+A ili S+D. Eto MOZhNO -
+echo diagonali kak raz i poyavilis v novom nabore dejstvij.
+echo.
+echo Zapishetsya "vpered + -5 + udar + begom" - vse chetyre chasti vmeste.
+echo V konce posmotri stroku "begom: N shagov, iz nih s udarom: M".
+echo Esli M nol - spring v udar ne popal, nado bit imenno na razbege.
 echo.
 echo Otschet nachnetsya s pervogo kadra: shchelkni po Minecraft kogda gotov.
 echo.
 pause
-"%PY%" zapis.py --metka othod --minut 5 %*
+"%PY%" zapis.py --metka othod-sprint --minut 5 %*
 pause

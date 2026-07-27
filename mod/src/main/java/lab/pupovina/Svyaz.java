@@ -158,7 +158,8 @@ public final class Svyaz implements Runnable {
             d.writeInt(0);
         } else {
             int flagi = (sn.vMire ? 1 : 0) | (Pauza.prosili() ? 2 : 0)
-                      | (sn.fokus ? 4 : 0) | (sn.menyu ? 8 : 0);
+                      | (sn.fokus ? 4 : 0) | (sn.menyu ? 8 : 0)
+                      | (sn.bezhit ? 16 : 0);
             d.writeByte(flagi);
             d.writeShort(sn.shirina);
             d.writeShort(sn.vysota);

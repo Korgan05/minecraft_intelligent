@@ -33,11 +33,11 @@ public final class Glaza {
         public final byte[] piksely;
         public final int shirina, vysota;
         public final float zhizn, maxZhizn, sytost, yaw, pitch;
-        public final boolean vMire, fokus, menyu;
+        public final boolean vMire, fokus, menyu, bezhit;
 
         Snimok(byte[] piksely, int shirina, int vysota, float zhizn, float maxZhizn,
                float sytost, float yaw, float pitch, boolean vMire, boolean fokus,
-               boolean menyu) {
+               boolean menyu, boolean bezhit) {
             this.piksely = piksely;
             this.shirina = shirina;
             this.vysota = vysota;
@@ -49,6 +49,7 @@ public final class Glaza {
             this.vMire = vMire;
             this.fokus = fokus;
             this.menyu = menyu;
+            this.bezhit = bezhit;
         }
     }
 
@@ -104,9 +105,14 @@ public final class Glaza {
         int w = shirina, h = vysota;
 
         float zhizn = 0f, maxZhizn = 0f, sytost = 0f, yaw = 0f, pitch = 0f;
+        // БЕЖИТ ли игрок — спрашиваем у самой игры, а не смотрим на клавишу.
+        // Человек часто разгоняется двойным W, а не клавишей бега: по клавише мы
+        // такой разбег не увидели бы вовсе, и урок «удар в спринте» не записался.
+        boolean bezhit = false;
         ClientPlayerEntity igrok = mc.player;
         boolean vMire = igrok != null;
         if (vMire) {
+            bezhit = igrok.isSprinting();
             zhizn = igrok.getHealth();
             maxZhizn = igrok.getMaxHealth();
             sytost = igrok.getFoodData().getFoodLevel();
@@ -123,7 +129,7 @@ public final class Glaza {
             kadr.close();
         }
         return new Snimok(px, w, h, zhizn, maxZhizn, sytost, yaw, pitch,
-                          vMire, mc.isWindowActive(), mc.screen != null);
+                          vMire, mc.isWindowActive(), mc.screen != null, bezhit);
     }
 
     /** Усреднение по прямоугольнику: каждый пиксель ответа — средний по своей клетке. */
