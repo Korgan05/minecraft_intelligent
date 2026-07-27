@@ -241,13 +241,25 @@ class Bojnya(gym.Env):
         так и упало — открыло свою связь вдобавок к этой и словило таймаут.
         Значит спрашивать надо тем соединением, которое уже есть.
         """
+        skazano = None
         while True:
             o = self.p.sostoyanie()
             prichina = self._nuzhna_pauza(o)
             if prichina is None:
                 self._posl = o
+                self.p.skazat("§aПуповина: начинаю")
                 return o
-            print(f"  жду: {prichina} ...", flush=True)
+            # Говорим В ИГРЕ, а не только в консоль. Иначе выходит тупик, в
+            # который человек уже попадал: обучение ждёт, потому что открыто меню
+            # при активном окне (по нашим правилам это его пауза), а он смотрит в
+            # игру и не понимает, отчего ничего не происходит.
+            if prichina != skazano:
+                print(f"  жду: {prichina} ...", flush=True)
+                skazano = prichina
+            if o["menyu"]:
+                self.p.skazat("§eЗАКРОЙ МЕНЮ - обучение ждёт тебя")
+            elif o["pauza"]:
+                self.p.skazat("§eПАУЗА включена - нажми P, чтобы начать")
             time.sleep(1.0)
 
     def _nuzhna_pauza(self, o):

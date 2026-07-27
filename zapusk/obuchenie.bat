@@ -16,6 +16,12 @@ echo.
 echo Poka idet obuchenie, NE zahodi v igru myshyu: esli fokus na igre,
 echo tvoi dvizheniya myshyu skladyvayutsya s ego pricelom i portyat navodku.
 echo.
+echo ESLI OBUChENIE ZASTRYALO NA MENYu: eto konsol zabrala fokus, igra sama
+echo otkryla menyu pauzy, a ty shchelknul po igre - i teper eto schitaetsya
+echo TVOEJ pauzoj (menyu + aktivnoe okno = chelovek hochet vmeshatsya).
+echo Prosto nazhmi v igre "Vernutsya k igre". Sushchestvo napishet nad hotbarom,
+echo chego ono zhdet.
+echo.
 echo PAUZA - klavisha P v igre. Escape pri aktivnom okne tozhe ostanavlivaet.
 echo OSTANOVIT SOVSEM: Ctrl+C V ETOM OKNE. Mozg sohranitsya.
 echo Mozg sohranyaetsya i po hodu, kazhdye 1000 shagov (models\ubijca_ckpt_*).
