@@ -5,8 +5,8 @@
 Гоняем случайные действия и смотрим, что среда отдаёт: меняется ли кадр, капает
 ли награда за урон, ловится ли убийство, укладываемся ли в темп 5 шагов в секунду.
 
-Перед запуском: щёлкни по окну Minecraft, будь В ИГРЕ и не трогай управление.
-Существом будет распоряжаться программа.
+Перед запуском: будь В ИГРЕ и не трогай управление — существом будет
+распоряжаться программа. Фокус окна моду не нужен, но сворачивать нельзя.
 
 Запуск: proba-mira.bat
 """
@@ -15,6 +15,7 @@ import time
 
 import numpy as np
 
+from telo import kanaly as KAN
 from telo import mir as M
 
 SHAGOV = 150            # ~30 секунд
@@ -33,19 +34,15 @@ def main():
     t0 = time.perf_counter()
     for i in range(SHAGOV):
         t = time.perf_counter()
-        a = int(rng.integers(len(M.DEJSTVIYA)))
+        a = [int(rng.integers(n)) for n in KAN.KANALY]
         obs, r, done, obrezan, inf = env.step(a)
         vremena.append(time.perf_counter() - t)
         kadry.append(obs["pov"].astype(np.int16))
         nagrada_vsego += r
         uron_vsego += inf.get("uron", 0.0)
         bolno += inf.get("bol", 0.0)
-        if inf.get("okno_ushlo"):
-            print("  !!! окно ушло на задний план — существо ослепло, верни фокус")
-            time.sleep(1)
-            continue
         if inf.get("uron"):
-            print(f"  шаг {i:3d}: {M.IMENA[a]:<16} УРОН {inf['uron']:.1f} HP  награда {r:+.1f}")
+            print(f"  шаг {i:3d}: {KAN.slovami(a):<28} УРОН {inf['uron']:.1f} HP  награда {r:+.1f}")
         if inf.get("kill"):
             ubijstv += 1
             print(f"  шаг {i:3d}: *** УБИЛ ЗОМБИ *** награда {r:+.1f}")

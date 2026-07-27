@@ -21,9 +21,11 @@ from stable_baselines3 import PPO
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from telo import kanaly as KAN
 from telo import mir as M
 
 SHAGOV = 250
+POVOROTY = [i for i, g in enumerate(KAN.POVOROT) if g != 0.0]
 
 
 def main():
@@ -34,6 +36,8 @@ def main():
 
     obs, _ = mir.reset()
     scheta = Counter()
+    po_kanalam = [Counter() for _ in KAN.KANALY]
+    povorotov = 0
     v_pricele = 0
     udarov = 0
     udarov_po_celi = 0
@@ -47,13 +51,16 @@ def main():
         nabl = {"pov": np.transpose(obs["pov"], (2, 0, 1))[None],
                 "vec": obs["vec"][None]}
         dejstvie, _ = mozg.predict(nabl, deterministic=True)
-        dejstvie = int(np.asarray(dejstvie).flatten()[0])
-        scheta[M.IMENA[dejstvie]] += 1
+        dejstvie = np.asarray(dejstvie).reshape(-1)[:len(KAN.KANALY)]
+        scheta[KAN.slovami(dejstvie)] += 1
+        for kanal, znachenie in enumerate(dejstvie):
+            po_kanalam[kanal][KAN.ZNACHENIYA[kanal][int(znachenie)]] += 1
+        povorotov += 1 if int(dejstvie[2]) in POVOROTY else 0
 
         diag = mir.p.diag()
         cel_v_pricele = "pricel=ENTITY" in diag
         v_pricele += 1 if cel_v_pricele else 0
-        bil = bool(M.DEJSTVIYA[dejstvie].get("udar"))
+        bil = bool(int(dejstvie[4]))
         if bil:
             udarov += 1
             udarov_po_celi += 1 if cel_v_pricele else 0
@@ -70,9 +77,15 @@ def main():
 
     mir.close()
 
-    print("=== ЧТО ВЫБИРАЛО СУЩЕСТВО ===")
-    for imya, skolko in scheta.most_common():
-        print(f"  {imya:<18} {skolko:4d}  ({100 * skolko / SHAGOV:5.1f}%)")
+    print("=== ЧТО ВЫБИРАЛО СУЩЕСТВО: по каналам ===")
+    for kanal, imya_kanala in enumerate(KAN.IMENA_KANALOV):
+        chasti = ", ".join(f"{ch} {100 * k / SHAGOV:.0f}%"
+                           for ch, k in po_kanalam[kanal].most_common(4))
+        print(f"  {imya_kanala:<9} {chasti}")
+    print(f"\n  поворачивало вообще: {100 * povorotov / SHAGOV:.0f}% шагов")
+    print("\n=== самые частые сочетания целиком ===")
+    for imya, skolko in scheta.most_common(6):
+        print(f"  {imya:<32} {skolko:4d}  ({100 * skolko / SHAGOV:5.1f}%)")
     print()
     print("=== ВИДЕЛО ЛИ ЦЕЛЬ ===")
     print(f"  зомби был в прицеле: {v_pricele} из {SHAGOV} шагов "

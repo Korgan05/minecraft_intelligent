@@ -1,19 +1,27 @@
 # -*- coding: utf-8 -*-
 """
-ЗАПИСЬ ПОКАЗА в новой лаборатории: ты играешь ОБЫЧНО, а мы переводим твою игру
-на язык существа.
+ЗАПИСЬ ПОКАЗА: ты играешь обычно, а мы переводим твою игру на язык существа.
 
-Отличие от прошлой записи, где ты мучился: никакого окна 64x64 и никаких клавиш
-J/L. Полный экран, нормальная мышь, свой клиент. Каждые 0.2 секунды мы:
-  * снимаем кадр 64x64 — ровно то, что видит существо;
-  * читаем зажатые физические клавиши и кнопку мыши;
-  * спрашиваем у СЕРВЕРА, насколько повернулся твой обзор;
-и складываем из этого одно из 12 действий существа.
+Что изменилось против прошлой записи, и это важно.
 
-Честная потеря: поворот у существа ступеньками по 15 градусов, поэтому доворот
-на 5 градусов округлится до «не поворачивал». Крупные повороты запишутся точно.
+1. КАДР БЕРЁТСЯ ИЗ МОДА, а не с рабочего стола. Значит ты и существо смотрите
+   одними глазами буквально, а не почти. Окно можно не держать поверх других.
 
-Запуск: zapis.bat   (проба без сохранения: zapis.bat --proba)
+2. ПОВОРОТ СОХРАНЯЕТСЯ ПО ВЕЛИЧИНЕ. Прошлая запись мерила настоящие градусы, но
+   потом их выбрасывала: всё крупнее 10 градусов писалось как 15, мельче — как
+   «не поворачивал». В трёх твоих записях размахи 45, 90 и «кругом» встречаются
+   РОВНО НОЛЬ раз из 4329 кадров — разворот на 180 записан как лёгкий доворот.
+   Теперь выбирается ближайшая из настоящих величин.
+
+3. ДВИЖЕНИЕ И ПОВОРОТ ПИШУТСЯ ВМЕСТЕ. Раньше выбиралось ОДНО действие на шаг, и
+   поворот был важнее движения: идёшь боком и доворачиваешь — сохранялся только
+   доворот. Именно это делало невозможным показать кружение вокруг цели с
+   удержанием прицела. Теперь пишутся все пять частей решения сразу.
+
+Дерись как обычно. Хочешь научить держать прицел — кружи вокруг зомби боком,
+не отпуская его из виду: теперь это ляжет в урок целиком.
+
+Запуск: zapusk\\zapis.bat   (проба без сохранения: zapis.bat --proba)
 Остановить: Ctrl+C. Запись сохраняется ПО ХОДУ, потерять игру нельзя.
 """
 
@@ -26,12 +34,12 @@ import numpy as np
 
 from telo import arena as A
 from telo import glaza as G
+from telo import kanaly as KAN
 from telo import konsol as K
 from telo import mir as M
+from telo import pupovina as P
 from telo import ruki as R
-from telo.arena import polozhenie
 
-POROG_POVOROTA = 10.0                  # градусов за шаг, чтобы счесть поворот намеренным
 OUT = Path(__file__).parent / "pokaz"
 MAX_PODRYAD_STOYAT = 4
 # Сохраняем ПО ХОДУ, а не в конце. Первая версия писала файл только после всех
@@ -49,48 +57,60 @@ def sohranit(fajl, pov_l, vec_l, act_l, nag_l):
     return True
 
 
-def opredelit_dejstvie(d_yaw, d_pitch, klavishi, udar):
-    """Игра человека -> номер действия существа.
+def blizhajshaya(gradusov, velichiny, krugom=False):
+    """Ближайшая настоящая величина к тому, на сколько ты повернул.
 
-    Сперва КРУПНЫЙ поворот (существу важнее всего научиться наводиться), затем
-    удар, затем движение. Порог 10 градусов отсекает дрожь мыши, которую в
-    ступеньки по 15 всё равно не перевести.
+    Ноль побеждает сам собой, когда поворот мелкий: до 2.5 градусов он ближе к
+    нулю, чем к пятёрке. Отдельного порога не нужно — и хорошо, потому что
+    именно порогом прошлая запись и выбрасывала мелкую доводку.
     """
-    if abs(d_yaw) > POROG_POVOROTA:
-        return 6 if d_yaw > 0 else 5
-    if udar:
-        return 11 if "W" in klavishi else 9
-    if abs(d_pitch) > POROG_POVOROTA:
-        return 8 if d_pitch > 0 else 7
-    if "W" in klavishi and "SPACE" in klavishi:
-        return 10
-    if "SPACE" in klavishi:
-        return 12                      # прыжок на месте: раньше падал в «стоять»
-    for k, nomer in (("W", 1), ("S", 2), ("A", 3), ("D", 4)):
-        if k in klavishi:
-            return nomer
-    return 0
+    if krugom and abs(gradusov) > 135:
+        return velichiny.index(180.0)
+    return min((abs(gradusov - g), i) for i, g in enumerate(velichiny)
+               if not (krugom and g == 180.0))[1]
 
 
-def itog(act_l, nag_l, ubijstv, uron_vsego, fajl, sohranyat):
+def opredelit_reshenie(d_yaw, d_pitch, klavishi, udar):
+    """Твоя игра -> решение существа по пяти каналам.
+
+    Ничего больше не теряется: идёшь боком с доворотом и бьёшь — все три части
+    сохранятся вместе.
+    """
+    nogi = frozenset(kl for kl in ("W", "S", "A", "D") if kl in klavishi)
+    nomer_nog = KAN.NOGI.index(nogi) if nogi in KAN.NOGI else 0
+    return (
+        nomer_nog,
+        1 if "SPACE" in klavishi else 0,
+        blizhajshaya(d_yaw, KAN.POVOROT, krugom=True),
+        blizhajshaya(d_pitch, KAN.VZGLYAD),
+        1 if udar else 0,
+    )
+
+
+def itog(act_l, ubijstv, uron_vsego, fajl, sohranyat):
     n = len(act_l)
     print(f"\nнаиграно примеров: {n} | убийств: {ubijstv} | урона: {uron_vsego:.1f} HP")
-    if n:
-        act = np.asarray(act_l)
-        print("разбивка:")
-        for i, imya in enumerate(M.IMENA):
-            kol = int((act == i).sum())
-            if kol:
-                print(f"   {imya:<16} {kol:5d}  ({100 * kol / n:5.1f}%)")
-        povorotov = int(((act == 5) | (act == 6)).sum())
-        if povorotov == 0:
-            print("\nВНИМАНИЕ: поворотов НЕТ — а именно им существо и не научилось.")
-        else:
-            print(f"\nповоротов в уроке: {povorotov} — то, чего существу не хватало")
-    if sohranyat and n:
-        print(f"сохранено: {fajl}")
-    elif not sohranyat:
-        print("ПРОБА: ничего не сохранено.")
+    if not n:
+        return
+    act = np.asarray(act_l)
+    print("\nчто попало в урок, по каналам:")
+    for kanal, imya_kanala in enumerate(KAN.IMENA_KANALOV):
+        stolbec = act[:, kanal]
+        chasti = [f"{imya} {100 * int((stolbec == z).sum()) / n:.0f}%"
+                  for z, imya in enumerate(KAN.ZNACHENIYA[kanal])
+                  if int((stolbec == z).sum())]
+        print(f"  {imya_kanala:<9} {', '.join(chasti)}")
+
+    krupnye = int(np.isin(act[:, 2], [i for i, g in enumerate(KAN.POVOROT)
+                                      if abs(g) >= 45]).sum())
+    vmeste = int(((act[:, 0] != 0) & (act[:, 2] != 0)).sum())
+    print(f"\nкрупных поворотов (45 и больше): {krupnye}")
+    if krupnye == 0:
+        print("  ноль — либо ты не разворачивался, либо запись опять теряет величину")
+    print(f"движение И поворот вместе: {vmeste} шагов ({100 * vmeste / n:.0f}%)")
+    if vmeste == 0:
+        print("  ноль — а ведь этому мы и хотели научить: кружить, не отпуская прицел")
+    print(f"\n{'сохранено: ' + str(fajl) if sohranyat else 'ПРОБА: ничего не сохранено.'}")
 
 
 def main():
@@ -110,19 +130,24 @@ def main():
     k.komandy(A.podgotovit_bojca(igrok))
     k.komandy(A.sbros_boya(igrok))
 
-    glaza, zagolovok, _ = G.glaza_na_okno("Minecraft")
-    hwnd, _ = G.najti_okno("Minecraft")
+    # Смотрим глазами существа: тот же кадр, те же приборы, тот же угол.
+    # Команда SOSTOYANIE ничего не нажимает, так что играешь только ты.
+    svyaz = P.Pupovina()
+    svyaz.razmer_kadra(64, 64)
+    hwnd, zagolovok = G.najti_okno("Minecraft")
     fajl = OUT / f"pokaz-{datetime.now():%Y%m%d-%H%M%S}.npz"
 
-    print(f"игрок {igrok} | окно «{zagolovok}»")
+    print(f"игрок {igrok} | окно «{zagolovok}» | {svyaz.ping()}")
     print(f"пиши {args.minut:g} минут. Остановить — Ctrl+C В ЭТОМ ОКНЕ.")
     print(f"сохраняю по ходу каждые 30 секунд -> {fajl.name}\n")
-    print("Дерись обычно: подходи, наводись мышью, бей. Убил — призову нового.")
+    print("Запись теперь сохраняет ВЕЛИЧИНУ поворота и движение вместе с ним.")
+    print("Хочешь научить держать прицел — кружи вокруг зомби боком, не отпуская его.")
     print("ЩЁЛКНИ ПО ОКНУ MINECRAFT сейчас, иначе запись будет на паузе.\n")
 
     pov_l, vec_l, act_l, nag_l = [], [], [], []
-    _, pred_rot = polozhenie(k, igrok)
-    pred = A.sostoyanie(k, igrok)
+    nachalo = svyaz.sostoyanie()
+    pred_yaw, pred_pitch = nachalo["yaw"], nachalo["pitch"]
+    pred = A.schet_boya(k, igrok)
     stoyal, ubijstv, uron_vsego = 0, 0, 0.0
     srok = time.perf_counter() + M.SEK_NA_SHAG
     konec = time.perf_counter() + args.minut * 60
@@ -143,46 +168,49 @@ def main():
                 continue
             zhalovalsya = False
 
-            kadr = glaza.kadr_sushchestva()
-            klavishi = {imya for imya in ("W", "A", "S", "D", "SPACE") if R.nazhimalas(imya)}
+            o = svyaz.sostoyanie()
+            if o["menyu"] or not o["v_mire"]:
+                continue
+            klavishi = {imya for imya in ("W", "A", "S", "D", "SPACE")
+                        if R.nazhimalas(imya)}
             udar = R.nazhimalas("MYSH_LEVAYA")   # щелчки короче шага — ловим и их
 
-            s = A.sostoyanie(k, igrok)
-            _, rot = polozhenie(k, igrok)
-            d_yaw = (rot[0] - pred_rot[0] + 180) % 360 - 180
-            d_pitch = rot[1] - pred_rot[1]
-            pred_rot = rot
+            d_yaw = (o["yaw"] - pred_yaw + 180) % 360 - 180
+            d_pitch = o["pitch"] - pred_pitch
+            pred_yaw, pred_pitch = o["yaw"], o["pitch"]
 
-            dejstvie = opredelit_dejstvie(d_yaw, d_pitch, klavishi, udar)
+            reshenie = opredelit_reshenie(d_yaw, d_pitch, klavishi, udar)
+            s = A.schet_boya(k, igrok)
             d_uron = max((s["uron"] or 0) - (pred["uron"] or 0), 0) / 10.0
             uron_vsego += d_uron
             if (s["ubijstva"] or 0) > (pred["ubijstva"] or 0):
                 ubijstv += 1
                 print(f"  *** убил зомби #{ubijstv} *** (записано {len(act_l)})")
             # Новая волна ТОЛЬКО когда все мертвы. Раньше призывал на первом же
-            # убийстве — при трёх зомби это дало бы бесконечную подпитку: убил
-            # одного, появились трое новых, недобитые остались, и загон забился бы.
+            # убийстве — при трёх зомби это дало бы бесконечную подпитку.
             if not A.est_mobov(k):
                 print(f"  --- волна зачищена, новые {A.ZOMBI_NA_ARENE} на арене ---")
                 k.komandy(A.sbros_boya(igrok))
                 time.sleep(0.4)
-                s = A.sostoyanie(k, igrok)
-                _, pred_rot = polozhenie(k, igrok)
+                s = A.schet_boya(k, igrok)
+                o = svyaz.sostoyanie()
+                pred_yaw, pred_pitch = o["yaw"], o["pitch"]
             pred = s
 
-            # «стоять» пишем не больше нескольких подряд: раздумья не должны стать уроком
-            stoyal = stoyal + 1 if dejstvie == 0 else 0
-            if dejstvie != 0 or stoyal <= MAX_PODRYAD_STOYAT:
-                zhizn = s["zhizn"] if s["zhizn"] is not None else M.MAX_HEALTH
-                pov_l.append(kadr.copy())
-                vec_l.append(np.array([min(zhizn / M.MAX_HEALTH, 1.0),
-                                       min(float(s.get("sytost") or 20.0) / 20.0, 1.0), 0.0,
-                                       float(s.get("mob_ryadom", 1.0)), 0.0, 0.0],
-                                      dtype=np.float32))
-                act_l.append(dejstvie)
+            # «ничего не делал» пишем не больше нескольких подряд: раздумья не
+            # должны стать уроком.
+            nichego = all(x == 0 for x in reshenie)
+            stoyal = stoyal + 1 if nichego else 0
+            if not nichego or stoyal <= MAX_PODRYAD_STOYAT:
+                pov_l.append(o["kadr"].copy())
+                vec_l.append(np.array([
+                    min(o["zhizn"] / M.MAX_HEALTH, 1.0),
+                    min(o["sytost"] / 20.0, 1.0), 0.0, 1.0, 0.0, 0.0],
+                    dtype=np.float32))
+                act_l.append(reshenie)
                 nag_l.append(d_uron * M.ZA_HP_URONA)
                 if d_uron > 0:
-                    print(f"  попал: {d_uron:.1f} HP ({M.IMENA[dejstvie]}, "
+                    print(f"  попал: {d_uron:.1f} HP ({KAN.slovami(reshenie)}, "
                           f"записано {len(act_l)})")
                 if not args.proba and len(act_l) % SHAGOV_MEZHDU_SOHRANENIYAMI == 0:
                     sohranit(fajl, pov_l, vec_l, act_l, nag_l)
@@ -193,11 +221,11 @@ def main():
         if not args.proba:
             sohranit(fajl, pov_l, vec_l, act_l, nag_l)
         try:
-            glaza.close()
+            svyaz.close()
             k.close()
         except Exception:
             pass
-        itog(act_l, nag_l, ubijstv, uron_vsego, fajl, not args.proba)
+        itog(act_l, ubijstv, uron_vsego, fajl, not args.proba)
 
 
 if __name__ == "__main__":
