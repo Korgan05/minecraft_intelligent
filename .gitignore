@@ -1,0 +1,25 @@
+# Сервер Minecraft: файл Mojang перевыкладывать нельзя, а мир строится
+# командами за секунду. Настройки сохранены отдельно как server.properties.primer
+server/
+
+# Промежуточные снимки мозга: копятся каждые 2000 шагов, по 4.5 МБ каждый.
+# Ключевые состояния добавляются в хранилище руками, при вехах.
+models/ubijca_ckpt_*.zip
+models/do-*.zip
+models/posle-*.zip
+
+# Служебное
+logs/
+*.log
+__pycache__/
+*.pyc
+
+# Остатки от скачивания сервера
+manifest.json
+ver.json
+*url.txt
+ssha.txt
+
+# Картинки от проверок
+proba-*.png
+pokaz/brak/

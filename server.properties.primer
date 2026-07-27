@@ -1,0 +1,40 @@
+# Настройки сервера для лаборатории. Скопируй в server/server.properties
+# после первого запуска server.jar и замени ПАРОЛЬ на свой.
+#
+# Сама папка server/ в хранилище не выкладывается: файл Mojang перевыкладывать
+# нельзя, а мир строится командами за секунду.
+
+# КОНСОЛЬ: через неё строится арена и читается точный урон
+enable-rcon=true
+rcon.port=25575
+rcon.password=POSTAV_SVOJ_PAROL
+broadcast-rcon-to-ops=false
+broadcast-console-to-ops=false
+
+# Сервер локальный, слушает только себя — проверка аккаунта не нужна
+online-mode=false
+server-ip=127.0.0.1
+server-port=25565
+
+# Плоский мир: зомби всегда на одном уровне с существом
+level-name=bojnya
+level-type=flat
+generate-structures=false
+
+# Бой
+difficulty=normal
+gamemode=survival
+force-gamemode=true
+pvp=true
+# естественный спавн выключен: толпа мобов однажды уронила частоту кадров до 1
+spawn-monsters=false
+spawn-animals=false
+spawn-npcs=false
+enable-command-block=true
+
+# Покой
+allow-nether=false
+max-players=4
+view-distance=6
+spawn-protection=0
+motd=Bojnya - laboratoriya ubijcy
