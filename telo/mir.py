@@ -3,12 +3,12 @@
 МИР существа — теперь через свой мод, а не через Windows.
 
 Что осталось ТОЧНО КАК БЫЛО, и это главное:
-  * кадр 64x64 RGB, четыре кадра памяти — значит зрение мозга переносится;
+  * кадр 64x64 RGB — значит зрение мозга переносится (кадров памяти теперь 8);
   * шаг 0.2 секунды и та же экономика боя — значит сравнение будет честным.
 Иначе нельзя было бы сказать, стало лучше от мода или просто изменились правила.
 
-Действие устроено по-новому: не один выбор из двадцати, а ПЯТЬ независимых
-частей сразу — ноги, прыжок, поворот, взгляд, рука. Чертёж в kanaly.py.
+Действие устроено по-новому: не один выбор из двадцати, а ШЕСТЬ независимых
+частей сразу — ноги, прыжок, поворот, взгляд, рука, бег. Чертёж в kanaly.py.
 Голова мозга под это перестроена, зрение перенесено без изменений.
 
 Что изменилось:
@@ -212,7 +212,6 @@ class Bojnya(gym.Env):
             print(f"противник-человек: {self.chelovek}")
         self._pamyat = []
         self._posl = self.p.sostoyanie()      # последний взгляд: из него читаем флаги
-        self.pred_dalnost = None              # плату за сближение с пустого места не даём
         self.shagov = 0
 
     # ── чувства ──
@@ -258,9 +257,6 @@ class Bojnya(gym.Env):
         self._pamyat = [o["kadr"].copy()] * KADROV_V_PAMYATI
         self._posl = o
         self.pred = A.schet_boya(self.k, self.igrok)
-        # Расстояние на начало боя. Без этого первый шаг получил бы плату за
-        # «сближение» с телепорта, которого существо не совершало.
-        self.pred_dalnost = A.rasstoyanie_do_moba(self.k, self.igrok, self.chelovek)
         self.shagov = 0
         self.srok = time.perf_counter() + SEK_NA_SHAG
         return self._obs(o, self._blizko()), {"igrok": self.igrok}
@@ -278,14 +274,29 @@ class Bojnya(gym.Env):
         ничего не стоит. Не верим — смотрим.
         """
         o = self.p.sostoyanie()
-        for _ in range(6):
-            if o["v_mire"] and o["zhizn"] > 0 and abs(o["max_zhizn"] - MAX_HEALTH) < 0.5:
+        for _ in range(8):
+            # ЗДОРОВЬЕ ДОЛЖНО БЫТЬ ПОЛНЫМ, а не просто «больше нуля».
+            #
+            # Прежняя проверка требовала лишь zhizn > 0 — и бой мог начаться с
+            # ОДНОЙ единицей здоровья, пройдя проверку. Существо тогда обречено
+            # не по своей вине: оно погибает от первого удара и получает за это
+            # полную плату за смерть. После того как плата выросла с 3 до 50,
+            # такой бой стоит существу -50 за то, чего оно не выбирало, и учит
+            # его тому, что положение безнадёжно.
+            #
+            # Это же объясняет часть ночного обвала: здоровье в среднем падало
+            # 20 -> 19 -> 16 -> 9 -> 4, то есть бои всё чаще начинались с
+            # недолеченным существом, а проверка это пропускала.
+            polnoe = o["zhizn"] >= MAX_HEALTH - 1.0
+            maksimum_verny = abs(o["max_zhizn"] - MAX_HEALTH) < 0.5
+            if o["v_mire"] and polnoe and maksimum_verny:
                 return o
             self.k.komandy(A.podkrepit_zdorovye(self.igrok))
             time.sleep(0.3)
             o = self.p.sostoyanie()
-        print(f"  !!! здоровье не выдалось: {o['zhizn']:.0f}/{o['max_zhizn']:.0f}",
-              flush=True)
+        print(f"  !!! ЗДОРОВЬЕ НЕ ВЫДАЛОСЬ ПОЛНОСТЬЮ: {o['zhizn']:.0f}/{o['max_zhizn']:.0f} "
+              f"(нужно {MAX_HEALTH:.0f}). Бой начнётся нечестным — существо "
+              "погибнет не по своей вине.", flush=True)
         return o
 
     def zhdat_gotovnosti(self):
@@ -363,9 +374,6 @@ class Bojnya(gym.Env):
         print("  === ПРОДОЛЖАЮ ===\n", flush=True)
         self._posl = o
         self.pred = A.schet_boya(self.k, self.igrok)   # боль за простой не в вину
-        # Расстояние тоже перечитываем: за паузу зомби могли сдвинуться, и
-        # платить существу за это нельзя — оно в это время не действовало.
-        self.pred_dalnost = A.rasstoyanie_do_moba(self.k, self.igrok, self.chelovek)
         self.srok = time.perf_counter() + SEK_NA_SHAG
 
     def step(self, action):
@@ -403,7 +411,6 @@ class Bojnya(gym.Env):
         if nogi_stoyat and dalnost is not None and dalnost > DALEKO:
             nagrada -= ZA_PROSTOJ_VDALI
             info["prostoj"] = dalnost
-        self.pred_dalnost = dalnost
 
         done = False
         # Убийством считаем и моба, и человека. Счётчик mob_kills игрока не

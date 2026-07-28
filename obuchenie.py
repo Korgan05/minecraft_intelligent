@@ -121,6 +121,16 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--shagov", type=int, default=2_000_000)
     p.add_argument("--lr", type=float, default=2.5e-4)
+    # БОНУС ЗА НЕУВЕРЕННОСТЬ. Стоял 0.02 со времён, когда действие было одним
+    # выбором из двадцати. При каналах энтропия СКЛАДЫВАЕТСЯ по всем шести, и
+    # её максимум вырос с 3.00 до 7.68 — то есть давление на случайность
+    # выросло в 2.6 раза само собой, без нашего решения. Существо стало
+    # получать за случайность вклад до 0.154 в потерю против прежних 0.060,
+    # а это сравнимо с самим обучением. Отсюда и несогласованные сочетания:
+    # ему буквально платили за то, чтобы не определяться.
+    # 0.0078 возвращает прежнее давление ровно.
+    p.add_argument("--svoboda", type=float, default=0.0078,
+                   help="бонус за неуверенность (было 0.02 при 20 действиях)")
     p.add_argument("--protiv-cheloveka", action="store_true",
                    help="противник — человек за вторым клиентом, зомби не призывать")
     args = p.parse_args()
@@ -130,6 +140,8 @@ def main():
         A.PROTIV_CHELOVEKA = True
         print("РЕЖИМ БОЯ ПРОТИВ ЧЕЛОВЕКА: зомби не призываются, "
               "убийство человека считается победой")
+    print(f"бонус за неуверенность: {args.svoboda} "
+          f"(при шести каналах 0.02 давало давление в 2.6 раза сильнее прежнего)")
     print(f"ступень лестницы: зомби {A.ZOMBI_NA_ARENE}, "
           f"с мечом {'да' if A.ZOMBI_S_MECHOM else 'нет'}")
     # Monitor ОБЯЗАТЕЛЕН: именно он ведёт учёт эпизодов, из которого берутся
@@ -142,7 +154,8 @@ def main():
     if zip_put.exists():
         model = PPO.load(MOZG, env=env, device="cuda",
                          custom_objects={"learning_rate": args.lr,
-                                         "lr_schedule": (lambda _: args.lr)})
+                                         "lr_schedule": (lambda _: args.lr),
+                                         "ent_coef": args.svoboda})
         model.tensorboard_log = str(LOGI)      # PPO.load путь к графикам не восстанавливает
         print(f"продолжаю с мозга после разминки: шагов {model.num_timesteps}")
         sbros_schetchika = False
