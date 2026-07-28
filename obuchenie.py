@@ -41,11 +41,27 @@ LENTA = ROOT / "lenta.log"
 LOGI = ROOT / "logs"
 
 
+# СТОРОЖ. За ночь существо съехало с 92% убийств до 19% и никто этого не видел:
+# прогон шёл 156 тысяч шагов без присмотра, и восемьдесят тысяч из них оно
+# разучивалось. Мозг спасли только промежуточные снимки.
+#
+# Теперь обучение само останавливается, если дела стали плохи. Это не замена
+# разбору, а страховка от долгой ночи: лучше остановиться на 850-м бою, чем
+# доехать до 1331-го.
+SLEDIT_ZA_POSLEDNIMI = 100       # по скольким последним боям судим
+HUZHE_CHEM = 0.55                # ниже этой доли убийств — останавливаемся
+NE_SUDIT_RANSHE = 200            # до этого числа боёв не судим: сперва болтанка
+
+
 class Lenta(BaseCallback):
-    """Что происходит в бою: убийства, итоги жизней, редкие сводки."""
+    """Что происходит в бою: убийства, итоги жизней, редкие сводки.
+
+    Заодно сторожит качество и останавливает обучение, если оно поехало вниз.
+    """
 
     def __init__(self):
         super().__init__()
+        self.itogi = []              # True за победу, False за смерть
         self.boj = 0
         self.ubijstv_vsego = 0
         self.uron_boya = 0.0
@@ -80,6 +96,7 @@ class Lenta(BaseCallback):
             self.smertej += 1 if pogib else 0
             self.rekord = max(self.rekord, self.uron_boya)
             itog = "УБИЛ" if inf.get("kill") else ("погиб" if pogib else "не успел")
+            self.itogi.append(bool(inf.get("kill")))
             zh_min = getattr(self, "zhizn_min", float("nan"))
             self._pishi(f"бой #{self.boj}: {itog} | урон {self.uron_boya:5.1f} HP | "
                         f"здоровье осталось {getattr(self, 'zhizn_konec', 0):4.0f}, "
@@ -87,6 +104,16 @@ class Lenta(BaseCallback):
                         f"убийств {self.ubijstv_vsego} | смертей {self.smertej}/{self.boj}")
             self.uron_boya, self.shagov_boya = 0.0, 0
             self.zhizn_min = 999.0
+            if self.boj >= NE_SUDIT_RANSHE:
+                posl = self.itogi[-SLEDIT_ZA_POSLEDNIMI:]
+                dolya = sum(posl) / len(posl)
+                if dolya < HUZHE_CHEM:
+                    self._pishi(
+                        f"!!! СТОРОЖ ОСТАНАВЛИВАЕТ: за последние {len(posl)} боёв "
+                        f"убийств {100 * dolya:.0f}%, ниже порога "
+                        f"{100 * HUZHE_CHEM:.0f}%. Дальше существо разучивается — "
+                        "останавливаюсь и сохраняю. Вернись к снимку получше.")
+                    return False
         return True
 
 
