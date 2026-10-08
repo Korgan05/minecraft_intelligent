@@ -154,8 +154,10 @@ def main():
 
     # Смотрим глазами существа: тот же кадр, те же приборы, тот же угол.
     # Команда SOSTOYANIE ничего не нажимает, так что играешь только ты.
+    # Размер кадра — из мира: уроки обязаны быть записаны теми же глазами,
+    # какими существо смотрит в бою, иначе вшивке они не годятся.
     svyaz = P.Pupovina()
-    svyaz.razmer_kadra(64, 64)
+    svyaz.razmer_kadra(M.SHIRINA_KADRA, M.VYSOTA_KADRA)
     hwnd, zagolovok = G.najti_okno("Minecraft")
     metka = ("-" + args.metka) if args.metka else ""
     fajl = OUT / f"pokaz{metka}-{datetime.now():%Y%m%d-%H%M%S}.npz"

@@ -226,6 +226,10 @@ def main():
     p.add_argument("--paket", type=int, default=256)
     p.add_argument("--so-starymi", action="store_true",
                    help="взять и записи до каналов (они спорят с новыми)")
+    p.add_argument("--prinuditelno", action="store_true",
+                   help="взять лучшую НЕвырожденную ступень, даже если приём по офлайн-мерке "
+                        "не перенялся: мерка приёма (доля 'боком') заточена под старые уроки "
+                        "и слепа к дуэли. Судья — живой замер после, с воротами.")
     p.add_argument("--povodok", type=float, default=None,
                    help="один поводок, без перебора: учим всю сеть с ним")
     p.add_argument("--kuda", default=None,
@@ -333,6 +337,7 @@ def main():
         return
 
     luchshee = None
+    zapasnoe = None
     for imya_stupeni, dat_chasti, vpered in stupeni:
         if luchshee:
             break
@@ -355,12 +360,23 @@ def main():
                     else ("вырождение" if not zhiv else "приём не перенялся"))
             print(f"  поводок {povodok:<5}: разнообразие {razn:.2f}, "
                   f"боком {bokom:.0%}, совпадение {sovp:.1%} — {znak}")
+            if zhiv and not vyros and (zapasnoe is None or sovp > zapasnoe[2]):
+                # запасной кандидат для --prinuditelno: живой (не вырожденный),
+                # с наибольшим совпадением. Мимо проверки вырождения принуждение
+                # НЕ ходит никогда.
+                zapasnoe = (imya_stupeni, povodok, sovp, priem, razn,
+                            {k: v.detach().clone()
+                             for k, v in politika.state_dict().items()})
             if zhiv and vyros:
                 luchshee = (imya_stupeni, povodok, sovp, priem, razn,
                             {k: v.detach().clone()
                              for k, v in politika.state_dict().items()})
                 break
 
+    if luchshee is None and args.prinuditelno and zapasnoe is not None:
+        print("!!! ПРИНУЖДЕНИЕ: офлайн-мерка приёма не прошла ни на одной ступени, "
+              "беру лучшую НЕвырожденную (судить будет живой замер)")
+        luchshee = zapasnoe
     if luchshee is None:
         politika.load_state_dict(ishodnoe)
         raise SystemExit(
